@@ -14,8 +14,8 @@ A bilingual (Chinese–English) meeting assistant that turns a raw meeting audio
 ## Quick start
 
 ```bash
-# 1. Create the conda environment
-conda create -n sma python=3.10 -y
+# 1. Create the conda environment (ffmpeg needed by WhisperX)
+conda create -n sma python=3.10 ffmpeg -c conda-forge -y
 conda activate sma
 pip install -r requirements.txt
 
