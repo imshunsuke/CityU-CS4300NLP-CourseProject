@@ -1,7 +1,7 @@
 [
   {
     "meeting": "ES2004a",
-    "audio": "data/ami/ES2004a_short.wav",
+    "audio": "data/ami/ES2004a.Mix-Headset.wav",
     "transcript_json": null,
     "gold_items": [
       {

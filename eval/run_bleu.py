@@ -27,10 +27,16 @@ def evaluate(manifest_path: Path, out_path: Path, system: str = "llm") -> pd.Dat
 
     nllb_tok = None
     nllb_model = None
+    nllb_device = "cpu"
     if system == "nllb":
+        import torch  # type: ignore
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer  # type: ignore
         nllb_tok = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
         nllb_model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M")
+        if torch.backends.mps.is_available():
+            nllb_device = "mps"
+            nllb_model = nllb_model.to(nllb_device)
+        print(f"[nllb] device: {nllb_device}")
 
     NLLB_CODES = {"en": "eng_Latn", "zh": "zho_Hans"}
     hyps: list[str] = []
@@ -43,6 +49,7 @@ def evaluate(manifest_path: Path, out_path: Path, system: str = "llm") -> pd.Dat
         else:
             nllb_tok.src_lang = NLLB_CODES[item["source_lang"]]
             inputs = nllb_tok(src, return_tensors="pt", truncation=True, max_length=512)
+            inputs = {k: v.to(nllb_device) for k, v in inputs.items()}
             out = nllb_model.generate(
                 **inputs,
                 forced_bos_token_id=nllb_tok.convert_tokens_to_ids(NLLB_CODES[item["target_lang"]]),
