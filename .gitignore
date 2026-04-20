@@ -1,0 +1,55 @@
+# Env
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
+
+# Data
+data/**/*.wav
+data/**/*.mp3
+data/**/*.flac
+data/**/*.m4a
+!data/samples/.gitkeep
+
+# Cache
+.cache/
+.diskcache/
+*.cache
+
+# Model weights
+*.pt
+*.bin
+*.safetensors
+hf_cache/
+
+# Eval intermediate
+eval/results/*.json
+eval/results/*.csv
+!eval/results/.gitkeep
+
+# Report build artifacts
+report/*.aux
+report/*.log
+report/*.out
+report/*.bbl
+report/*.blg
+report/*.synctex.gz
+report/*.fls
+report/*.fdb_latexmk
+report/*.toc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+Thumbs.db

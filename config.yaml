@@ -1,0 +1,35 @@
+models:
+  llm_main: gpt-4o-mini
+  llm_judge: gpt-4o
+  embedding: text-embedding-3-small
+  asr: large-v3
+  diarization: pyannote/speaker-diarization-3.1
+  summary_baseline_en: facebook/bart-large-cnn
+  summary_baseline_zh: csebuetnlp/mT5_multilingual_XLSum
+  translation_baseline: facebook/nllb-200-distilled-600M
+
+asr:
+  device: cpu
+  compute_type: int8
+  batch_size: 16
+
+summary:
+  max_key_points: 5
+  max_decisions: 5
+  max_follow_ups: 5
+
+translation:
+  context_window: 3
+
+sentiment:
+  emotions: [neutral, joy, anger, sadness, surprise, fear, disgust]
+  window_seconds: 30
+
+qa:
+  top_k: 5
+
+paths:
+  cache_dir: .cache
+  data_dir: data
+  samples_dir: data/samples
+  results_dir: eval/results

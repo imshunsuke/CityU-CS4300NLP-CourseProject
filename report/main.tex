@@ -1,0 +1,118 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{times}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage[inline]{enumitem}
+\usepackage{xcolor}
+\usepackage{CJKutf8}
+
+\title{Smart Meeting Assistant: \\ A Bilingual Pipeline with LLM-as-Judge Evaluation}
+\author{CS4300 NLP Group Project \\ City University of Hong Kong}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present an end-to-end smart meeting assistant for bilingual (Chinese--English) meetings,
+unifying five modules --- automatic speech recognition with speaker diarization, summarization,
+translation, action-item extraction, and sentiment/engagement analysis --- over a single shared
+transcript representation. Each language-understanding module pairs a large-language-model (LLM)
+instantiation with a task-specific pretrained baseline (BART, mT5, NLLB-200). We further
+introduce a unified LLM-as-Judge evaluation layer and a speaker-constrained function-calling
+schema for action-item extraction. Experiments on AMI, AliMeeting, MeetingBank, and MELD show
+that the LLM pipeline is competitive with or exceeds specialized baselines on four of five
+modules, while the LLM-as-Judge scores correlate with ROUGE and F1 at the meeting level.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+% TODO: bilingual meetings are common in HK/academic settings. Five required modules.
+% Contributions:
+% 1. Unified shared-transcript architecture enabling parallel module execution.
+% 2. Bilingual-aware prompting with speaker context window.
+% 3. LLM-as-Judge evaluation across summary / actions.
+% 4. Comparative pretrained-vs-LLM baselines for 4 of 5 modules.
+% 5. A Gradio demo with retrieval-augmented Q&A.
+
+\section{Related Work}
+\label{sec:related}
+% TODO: Whisper (Radford et al.); pyannote (Bredin et al.); AMI-based summarization
+% (Shang et al.; Zhang et al.); MeetingBank (Hu et al.); NLLB (NLLB team 2022);
+% LLM-as-Judge (Zheng et al. 2023); Self-RAG (Asai et al. 2024).
+
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Shared-Transcript Architecture}
+% TODO: architecture figure (fig:arch) showing ASR -> transcript JSON -> 4 parallel modules + QA.
+
+\subsection{Bilingual-Aware Prompting}
+% TODO: describe language auto-detection, target-lang flag, speaker-aware context window for translation.
+
+\subsection{Structured Outputs via Function Calling}
+% TODO: action-item JSON schema; assignee enum constrained to speakers produced by Mod 1.
+
+\subsection{LLM-as-Judge}
+% TODO: 1-5 Likert on faithfulness / coverage / specificity; correlation to ROUGE / F1.
+
+\section{Experiments}
+\label{sec:exp}
+
+\subsection{Datasets}
+\begin{table}[h]
+\centering
+\begin{tabular}{lllr}
+\toprule
+Dataset & Language & Purpose & Size \\
+\midrule
+AMI Meeting Corpus & EN & M1--5 ground truth & 10 meetings \\
+AliMeeting (M2MeT) & ZH & M1, M3 & 5 sessions \\
+MeetingBank & EN & M2 (ROUGE) & 50 summaries \\
+MELD & EN & M5 (emotion) & 200 utts \\
+\bottomrule
+\end{tabular}
+\caption{Evaluation datasets.}
+\end{table}
+
+\subsection{Module 1: ASR + Diarization}
+% TODO: WER (EN), CER (ZH), DER. Table.
+
+\subsection{Module 2: Summarization}
+% TODO: ROUGE-1/2/L, BERTScore. Table comparing GPT-4o-mini vs BART vs mT5.
+
+\subsection{Module 3: Translation}
+% TODO: sacreBLEU. Table: GPT-4o-mini vs NLLB-200 on ZH->EN and EN->ZH.
+
+\subsection{Module 4: Action Items}
+% TODO: P/R/F1 + assignee accuracy on 30 AMI segments; Cohen's kappa for annotator agreement.
+
+\subsection{Module 5: Sentiment}
+% TODO: MELD accuracy / macro-F1. Show timeline figure on AMI ES2004a.
+
+\subsection{LLM-as-Judge}
+% TODO: Table of Likert averages per system per kind. Correlation plot with automated metrics.
+
+\section{Discussion}
+\label{sec:disc}
+% TODO: Where LLM wins (summary novelty, action items). Where baselines are competitive (MT BLEU).
+% Bilingual code-switching failures. Cost and latency analysis (cache helps).
+
+\section{Conclusion}
+\label{sec:conclusion}
+% TODO: Wrap up. Limitations + future work (on-device ASR, long-context summarization, humans-in-the-loop).
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\appendix
+\section{Prompts}
+% TODO: paste full system prompts used for each module.
+
+\section{Presentation slides}
+% TODO: \includepdf[pages=-]{../slides/slides.pdf}
+
+\end{document}
