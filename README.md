@@ -14,12 +14,15 @@ A bilingual (Chinese–English) meeting assistant that turns a raw meeting audio
 ## Quick start
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+# 1. Create the conda environment
+conda create -n sma python=3.10 -y
+conda activate sma
 pip install -r requirements.txt
 
-cp .env.example .env   # then fill OPENAI_API_KEY and HF_TOKEN
+# 2. Copy the shared .env from your home directory (OPENAI_API_KEY + HF_TOKEN)
+cp ~/.env .env
 
-# Launch the Gradio UI
+# 3. Launch the Gradio UI
 python app.py
 
 # Or run the CLI pipeline
