@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
+
 from .schemas import Transcript, Utterance
+
+load_dotenv()
 
 
 def _sha256_file(path: Path) -> str:
@@ -39,6 +44,8 @@ def transcribe_with_whisperx(
     hf_token: Optional[str] = None,
 ) -> Transcript:
     import whisperx  # type: ignore
+
+    hf_token = hf_token or os.getenv("HF_TOKEN")
 
     audio = whisperx.load_audio(str(audio_path))
     asr_model = whisperx.load_model(model_name, device=device, compute_type=compute_type)
