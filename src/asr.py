@@ -13,6 +13,14 @@ from .schemas import Transcript, Utterance
 load_dotenv()
 
 
+def _mps_available() -> bool:
+    try:
+        import torch
+        return bool(torch.backends.mps.is_available())
+    except Exception:
+        return False
+
+
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -47,15 +55,25 @@ def transcribe_with_whisperx(
 
     hf_token = hf_token or os.getenv("HF_TOKEN")
 
+    torch_device = "mps" if _mps_available() else "cpu"
+
     audio = whisperx.load_audio(str(audio_path))
-    asr_model = whisperx.load_model(model_name, device=device, compute_type=compute_type)
+    # faster-whisper (ctranslate2) does not support MPS; keep ASR on CPU.
+    asr_model = whisperx.load_model(model_name, device="cpu", compute_type=compute_type)
     result = asr_model.transcribe(audio, batch_size=batch_size)
     lang = result.get("language", "auto")
 
-    align_model, metadata = whisperx.load_align_model(language_code=lang, device=device)
-    result = whisperx.align(result["segments"], align_model, metadata, audio, device)
+    align_model, metadata = whisperx.load_align_model(language_code=lang, device=torch_device)
+    result = whisperx.align(result["segments"], align_model, metadata, audio, torch_device)
 
-    diar_pipeline = whisperx.DiarizationPipeline(use_auth_token=hf_token, device=device)
+    from whisperx.diarize import DiarizationPipeline  # type: ignore
+
+    diar_device = "mps" if device == "cpu" and _mps_available() else device
+    diar_pipeline = DiarizationPipeline(
+        model_name="pyannote/speaker-diarization-3.1",
+        token=hf_token,
+        device=diar_device,
+    )
     diar = diar_pipeline(str(audio_path))
     result = whisperx.assign_word_speakers(diar, result)
 
