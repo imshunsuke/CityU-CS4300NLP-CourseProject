@@ -23,15 +23,25 @@ def _load_transcript(item: dict):
     return transcribe(Path(item["audio"]))
 
 
+_EMBED_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+_st_model = None
+
+
+def _embed_local(texts: list[str]) -> np.ndarray:
+    global _st_model
+    if _st_model is None:
+        from sentence_transformers import SentenceTransformer  # type: ignore
+        _st_model = SentenceTransformer(_EMBED_MODEL_NAME)
+    return _st_model.encode(texts, normalize_embeddings=True, convert_to_numpy=True).astype(np.float32)
+
+
 def _match_gold_to_pred(gold: list[dict], pred: list[dict], client: LLMClient, threshold: float = 0.55):
     if not gold or not pred:
         return [], []
     gold_texts = [g["task"] for g in gold]
     pred_texts = [p["task"] for p in pred]
-    g_emb = np.array(client.embed(gold_texts), dtype=np.float32)
-    p_emb = np.array(client.embed(pred_texts), dtype=np.float32)
-    g_emb /= np.linalg.norm(g_emb, axis=1, keepdims=True) + 1e-9
-    p_emb /= np.linalg.norm(p_emb, axis=1, keepdims=True) + 1e-9
+    g_emb = _embed_local(gold_texts)
+    p_emb = _embed_local(pred_texts)
     sim = g_emb @ p_emb.T
 
     matched_g, matched_p = [], []

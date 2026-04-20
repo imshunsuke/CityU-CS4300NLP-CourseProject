@@ -6,6 +6,7 @@ and compare GPT-4o-mini's emotion label against the gold label.
 from __future__ import annotations
 
 import argparse
+import random
 from pathlib import Path
 
 import pandas as pd
@@ -16,17 +17,17 @@ from src.schemas import Transcript, Utterance
 from src.sentiment import EMOTIONS, score_utterances
 
 
-def _load_meld(n_samples: int) -> list[dict]:
-    from datasets import load_dataset  # type: ignore
-
-    ds = load_dataset("declare-lab/MELD-dialogue", split="validation")
-    rows = ds.shuffle(seed=42).select(range(min(n_samples, len(ds))))
+def _load_meld(n_samples: int, csv_path: Path = Path("data/meld/dev_sent_emo.csv"), seed: int = 42) -> list[dict]:
+    df = pd.read_csv(csv_path)
+    df = df.sample(frac=1, random_state=seed).reset_index(drop=True)
     out = []
-    for r in rows:
-        emo = str(r.get("Emotion", "neutral")).lower()
+    for _, row in df.iterrows():
+        emo = str(row.get("Emotion", "neutral")).lower()
         if emo not in EMOTIONS:
             continue
-        out.append({"speaker": str(r.get("Speaker", "S")), "text": r["Utterance"], "emotion": emo})
+        out.append({"speaker": str(row.get("Speaker", "S")), "text": str(row["Utterance"]), "emotion": emo})
+        if len(out) >= n_samples:
+            break
     return out
 
 

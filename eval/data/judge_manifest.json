@@ -1,0 +1,26 @@
+[
+  {
+    "meeting": "ES2004a",
+    "transcript_json": null,
+    "audio": "data/ami/ES2004a.Mix-Headset.wav",
+    "output_text": "The team is developing a user-friendly remote control aimed at a wide market. Functional, conceptual, and detailed design phases were discussed. The selling price is set at 25 euros with production costs at 12.50 euros. The product should be accessible to all age groups, including the elderly. Incorporating a menu display similar to mobile phones was suggested. The selling price of the remote control will be 25 euros. Production costs are confirmed to be 12.50 euros. The target market will include all age groups, focusing on user-friendliness. The design will not necessarily need to be fashionable or metallic. The team will reconvene in half an hour to discuss individual work. Team members will work on individual design ideas before the next meeting. Consideration of a dual function for basic and advanced controls is needed. Explore the feasibility of a flip-top remote control design. Research on the cost implications of using different materials for the remote. Gather feedback on the proposed menu display feature for usability.",
+    "kind": "summary",
+    "system": "gpt-4o-mini"
+  },
+  {
+    "meeting": "ES2004a",
+    "transcript_json": null,
+    "audio": "data/ami/ES2004a.Mix-Headset.wav",
+    "output_text": "Project manager: We're developing a remote control, which you probably already know We want it to be original, appealing to a wide market, but not a hunk of metal Grannies to kids, maybe even pooches, should be able to use it",
+    "kind": "summary",
+    "system": "bart"
+  },
+  {
+    "meeting": "ES2004a",
+    "transcript_json": null,
+    "audio": "data/ami/ES2004a.Mix-Headset.wav",
+    "output_text": "- [H] Organize individual work on functional design (owner: SPEAKER_02)\n- [H] Prepare for the next meeting with a PowerPoint presentation (owner: SPEAKER_02)\n- [M] Review the company website for design inspiration (owner: SPEAKER_00)\n- [M] Consider the use of plastic in remote control design (owner: SPEAKER_03)",
+    "kind": "actions",
+    "system": "gpt-4o-mini"
+  }
+]

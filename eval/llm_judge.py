@@ -15,8 +15,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.asr import transcribe_from_json
+from src.asr import transcribe, transcribe_from_json
 from src.llm_client import LLMClient
+
+
+def _load_transcript(item: dict):
+    if item.get("transcript_json"):
+        return transcribe_from_json(Path(item["transcript_json"]))
+    return transcribe(Path(item["audio"]))
 
 
 JUDGE_SYSTEM = (
@@ -50,7 +56,7 @@ def evaluate(manifest_path: Path, out_path: Path) -> pd.DataFrame:
     client = LLMClient()
     rows = []
     for item in manifest:
-        transcript = transcribe_from_json(Path(item["transcript_json"]))
+        transcript = _load_transcript(item)
         scores = judge(
             transcript.as_plain_text(with_speaker=True)[:8000],
             item["output_text"],
