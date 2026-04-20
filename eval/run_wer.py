@@ -8,10 +8,28 @@ import argparse
 import json
 from pathlib import Path
 
+import re
+
 import jiwer
 import pandas as pd
 
 from src.asr import transcribe
+
+
+_EN_TRANSFORM = jiwer.Compose(
+    [
+        jiwer.ToLowerCase(),
+        jiwer.RemovePunctuation(),
+        jiwer.RemoveMultipleSpaces(),
+        jiwer.Strip(),
+        jiwer.ReduceToListOfListOfWords(),
+    ]
+)
+
+
+def _normalize_zh(text: str) -> str:
+    """Remove punctuation + whitespace for CER on Chinese."""
+    return re.sub(r"[，。、；：？！,.;:?!\"'\s]+", "", text)
 
 
 def evaluate(manifest_path: Path, out_path: Path) -> pd.DataFrame:
@@ -23,10 +41,14 @@ def evaluate(manifest_path: Path, out_path: Path) -> pd.DataFrame:
         ref = item["reference"]
         lang = item.get("lang", "en")
         if lang == "zh":
-            metric = jiwer.cer(ref, hyp)
+            hyp_n = _normalize_zh(hyp)
+            ref_n = _normalize_zh(ref)
+            metric = jiwer.cer(ref_n, hyp_n)
             name = "CER"
         else:
-            metric = jiwer.wer(ref, hyp)
+            metric = jiwer.wer(
+                ref, hyp, reference_transform=_EN_TRANSFORM, hypothesis_transform=_EN_TRANSFORM
+            )
             name = "WER"
         rows.append({"audio": item["audio"], "lang": lang, "metric": name, "value": metric})
     df = pd.DataFrame(rows)

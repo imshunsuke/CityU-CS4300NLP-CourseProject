@@ -13,8 +13,14 @@ import numpy as np
 import pandas as pd
 
 from src.actions import extract_action_items
-from src.asr import transcribe_from_json
+from src.asr import transcribe, transcribe_from_json
 from src.llm_client import LLMClient
+
+
+def _load_transcript(item: dict):
+    if item.get("transcript_json"):
+        return transcribe_from_json(Path(item["transcript_json"]))
+    return transcribe(Path(item["audio"]))
 
 
 def _match_gold_to_pred(gold: list[dict], pred: list[dict], client: LLMClient, threshold: float = 0.55):
@@ -49,7 +55,7 @@ def evaluate(manifest_path: Path, out_path: Path) -> pd.DataFrame:
     rows = []
     tp = fp = fn = assign_correct = 0
     for item in manifest:
-        transcript = transcribe_from_json(Path(item["transcript_json"]))
+        transcript = _load_transcript(item)
         pred_list = extract_action_items(transcript, client)
         pred = [p.model_dump() for p in pred_list.items]
         gold = item["gold_items"]

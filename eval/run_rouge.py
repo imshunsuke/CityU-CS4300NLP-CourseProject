@@ -11,9 +11,16 @@ from pathlib import Path
 import pandas as pd
 from rouge_score import rouge_scorer
 
-from src.asr import transcribe_from_json
+from src.asr import transcribe, transcribe_from_json
 from src.llm_client import LLMClient
 from src.summarize import summarize_with_baseline, summarize_with_llm
+
+
+def _load_transcript(item: dict):
+    """Prefer cached transcript_json; otherwise re-run ASR (cached by audio hash)."""
+    if item.get("transcript_json"):
+        return transcribe_from_json(Path(item["transcript_json"]))
+    return transcribe(Path(item["audio"]))
 
 
 def _summary_text(summary) -> str:
@@ -27,7 +34,7 @@ def evaluate(manifest_path: Path, out_path: Path, use_baseline: bool = False) ->
     client = LLMClient()
     rows = []
     for item in manifest:
-        transcript = transcribe_from_json(Path(item["transcript_json"]))
+        transcript = _load_transcript(item)
         if use_baseline:
             summary = summarize_with_baseline(transcript)
             system = "bart"

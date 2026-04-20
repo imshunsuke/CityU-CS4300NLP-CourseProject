@@ -121,6 +121,7 @@ def build_manifests(
             summary_rows.append(
                 {
                     "meeting": meeting,
+                    "audio": str(audio_path),
                     "transcript_json": transcript_json,
                     "reference_summary": " ".join(summaries["abstract"]),
                 }
@@ -130,6 +131,7 @@ def build_manifests(
             actions_rows.append(
                 {
                     "meeting": meeting,
+                    "audio": str(audio_path),
                     "transcript_json": transcript_json,
                     "gold_items": [{"task": a, "assignee": ""} for a in summaries["actions"]],
                 }
