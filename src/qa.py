@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 
 from .llm_client import LLMClient
@@ -13,19 +15,28 @@ SYSTEM_PROMPT = (
 )
 
 
+EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+
+@lru_cache(maxsize=1)
+def _embedder():
+    from sentence_transformers import SentenceTransformer  # type: ignore
+
+    return SentenceTransformer(EMBED_MODEL)
+
+
 class MeetingQA:
     def __init__(self, transcript: Transcript, client: LLMClient):
         self.transcript = transcript
         self.client = client
         texts = [f"[{u.speaker}] {u.text}" for u in transcript.utterances]
-        embeddings = client.embed(texts)
-        mat = np.array(embeddings, dtype=np.float32)
-        norms = np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9
-        self.matrix = mat / norms
+        model = _embedder()
+        mat = model.encode(texts, normalize_embeddings=True, convert_to_numpy=True).astype(np.float32)
+        self.matrix = mat
 
     def retrieve(self, query: str, k: int = 5) -> list[int]:
-        q_vec = np.array(self.client.embed([query])[0], dtype=np.float32)
-        q_vec /= np.linalg.norm(q_vec) + 1e-9
+        model = _embedder()
+        q_vec = model.encode([query], normalize_embeddings=True, convert_to_numpy=True).astype(np.float32)[0]
         scores = self.matrix @ q_vec
         return np.argsort(scores)[::-1][:k].tolist()
 
