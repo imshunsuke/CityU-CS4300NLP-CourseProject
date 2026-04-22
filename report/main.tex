@@ -1,157 +1,161 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{times}
-\usepackage{amsmath,amssymb}
+\usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage{hyperref}
-\usepackage[inline]{enumitem}
 \usepackage{xcolor}
 \usepackage{CJKutf8}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,shapes,shadows,backgrounds}
+\usepackage[hidelinks]{hyperref}
+\usepackage[inline]{enumitem}
+\setlist{nosep,leftmargin=*}
+\setlength{\textfloatsep}{6pt}
+\setlength{\floatsep}{6pt}
+\setlength{\intextsep}{6pt}
+\setlength{\abovecaptionskip}{4pt}
+\setlength{\belowcaptionskip}{0pt}
 
-\title{Smart Meeting Assistant: \\ A Shared-Transcript Pipeline with LLM-as-Judge Evaluation \\ for Bilingual Chinese--English Meetings}
-\author{CS4300 NLP Group Project \\ Department of Computer Science, City University of Hong Kong}
+\title{Smart Meeting Assistant: A Shared-Transcript Modular Pipeline with \\
+an LLM-as-Judge Pilot for Bilingual Chinese--English Meetings}
+\author{CS4300 NLP Group Project (Topic 5) \\
+Department of Computer Science, City University of Hong Kong}
 \date{April 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-We present an end-to-end smart meeting assistant designed for bilingual
-(Chinese--English) scenarios common in Hong Kong academic and industrial
-settings. The system unifies five participant-facing modules --- automatic
-speech recognition with speaker diarization, meeting summarization,
-context-aware translation, action-item extraction, and sentiment / engagement
-analysis --- over a single shared-transcript representation, together with a
-retrieval-augmented Q\&A interface and a live microphone mode for real-time
-transcription and translation. Each language-understanding module pairs a
-GPT-4o-mini instantiation with a task-specific pretrained baseline
-(BART-large-cnn, NLLB-200-distilled-600M), and we introduce a unified
-LLM-as-Judge evaluation layer that complements surface-form metrics with
-Likert ratings of faithfulness, coverage, and specificity. On AMI, AliMeeting,
-MeetingBank, MELD, and news-commentary parallel sentences, the LLM pipeline
-matches or exceeds all four specialized baselines while the judge layer
-reveals a classical abstractive-vs-extractive trade-off that pure ROUGE and
-BLEU obscure.
+We present an end-to-end smart meeting assistant for bilingual
+(Chinese--English) settings that unifies five participant-facing
+modules---ASR with speaker diarization, summarization, translation,
+action-item extraction, and sentiment / engagement analysis---over
+a single shared-transcript representation, with a retrieval-augmented
+Q\&A interface and a live-microphone mode. Each language-understanding
+module pairs a GPT-4o-mini instantiation with a task-specific
+pretrained baseline (BART-large-CNN, NLLB-200 distilled 600\,M), and
+we run a small LLM-as-Judge pilot to complement ROUGE/BLEU with
+Likert ratings of faithfulness, coverage, and specificity. On AMI
+ES2004a, AliMeeting R8001\_M8004, MELD, and 26 news-commentary
+EN$\leftrightarrow$ZH pairs, the LLM matches or exceeds the
+specialized baselines on surface metrics; the judge pilot surfaces a
+faithfulness-vs-coverage trade-off between the long-context LLM and
+the 1\,024-token BART that ROUGE alone hides. We report honest
+per-direction translation numbers and a task-detection-only
+action-item evaluation, and discuss the system's current limits.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
 Meetings in Hong Kong academic, legal, and business settings routinely
-switch between Cantonese, Mandarin, and English within a single discussion.
-Participants face a compound cognitive load: following the spoken content,
-mentally translating across languages, tracking action items, and sensing
-the room's emotional dynamic. Existing commercial meeting tools (e.g.\ Zoom
-AI Companion, Otter.ai) focus on English and provide post-hoc summaries
-rather than in-session support; open-source meeting NLP research has
-likewise concentrated on single-language benchmarks such as AMI and
-MeetingBank~\cite{hu2023meetingbank}.
+switch between Cantonese, Mandarin, and English. Participants face a
+compound cognitive load: following the spoken content, mentally
+translating across languages, tracking action items, and sensing the
+room's emotional dynamic. Commercial tools (Zoom AI Companion, Otter.ai)
+focus on English and provide post-hoc summaries rather than in-session
+support, and most open-source meeting NLP research has concentrated on
+single-language benchmarks such as AMI~\cite{carletta2006ami}.
 
-We build a smart meeting assistant that explicitly addresses the bilingual
-setting and provides both in-session streaming support and post-hoc
-structured analysis. Concretely, the system produces six participant-facing
-views from a meeting audio input: a speaker-labeled transcript, an
-abstractive summary with decisions and follow-ups, a translated transcript
-in the complementary language, a table of action items grounded in
-transcript spans, a sentiment-and-engagement timeline, and an
-embedding-retrieval Q\&A interface. A seventh live mode streams microphone
-input through chunked Whisper transcription and asynchronous GPT-4o-mini
-translation.
+We build a smart meeting assistant that explicitly addresses the
+bilingual setting and provides both in-session streaming support and
+post-hoc structured analysis. Given a meeting audio input the system
+produces six participant-facing views: a speaker-labeled transcript, an
+abstractive summary with decisions and follow-ups, a translated
+transcript in the complementary language, a table of action items
+grounded in transcript spans, a sentiment-and-engagement timeline, and
+an embedding-retrieval Q\&A interface. A seventh live mode streams
+microphone input through chunked Whisper transcription and asynchronous
+GPT-4o-mini translation.
 
-The contributions of this work are:
-\begin{enumerate}[label=(\roman*),itemsep=2pt,topsep=2pt]
-\item A \textbf{shared-transcript parallel architecture} in which Whisper with
-pyannote diarization emits a canonical transcript JSON that four downstream
-LLM modules consume independently, enabling parallel evaluation and ablation.
-\item \textbf{Bilingual-aware prompting} with a speaker-constrained
-JSON-schema function call for action-item extraction, which forces the LLM
-to choose assignees from the speaker set produced upstream.
-\item A \textbf{unified LLM-as-Judge evaluation layer} that rates every
-module's output on faithfulness, coverage, and specificity, complementing
-ROUGE / BLEU / F1.
-\item A comparative study against four pretrained baselines
-(BART-large-cnn, mT5-XLSum, NLLB-200-distilled-600M, sentence-transformers
-for retrieval) on AMI, AliMeeting, MeetingBank, and MELD.
-\item A \textbf{live streaming mode} combining \texttt{faster-whisper}
-chunked ASR with thread-pooled asynchronous translation, demonstrating the
-feasibility of real-time participant support on commodity laptops.
+Our contributions are:
+\begin{enumerate}[label=(\roman*)]
+\item A \textbf{shared-transcript modular architecture} in which
+WhisperX with pyannote diarization emits a canonical transcript JSON
+that four downstream LLM modules consume independently, enabling
+independent evaluation and ablation.
+\item \textbf{Bilingual-aware prompting}: WhisperX emits one
+meeting-level language tag, and a CJK character-ratio heuristic is
+used as a per-utterance fallback only when that tag is
+\texttt{auto}; on top of that we apply a speaker-constrained
+function-calling schema for action-item extraction that forces the
+LLM to choose assignees from the upstream speaker set.
+\item An \textbf{LLM-as-Judge pilot} (three triples, summarization and
+actions) that complements ROUGE/BLEU with Likert ratings on
+faithfulness, coverage, and specificity.
+\item A \textbf{live streaming mode} that combines \texttt{faster-%
+whisper base} chunked ASR with a thread-pool of asynchronous
+translation LLM calls on commodity laptops.
 \end{enumerate}
 
 \section{Related Work}
 \label{sec:related}
 \paragraph{Speech recognition and diarization.}
-Whisper~\cite{radford2023whisper} established strong zero-shot ASR across
-languages by training on 680k hours of weakly supervised audio.
-pyannote.audio~\cite{bredin2020pyannote} remains the standard open-source
-diarization stack; WhisperX combines the two with wav2vec2-based forced
-alignment to produce word-level timestamps with speaker labels.
+Whisper~\cite{radford2023whisper} established strong zero-shot ASR
+via 680\,k~h of weakly supervised training.
+pyannote.audio~\cite{bredin2020pyannote} with the powerset
+formulation~\cite{plaquet23powerset} remains the standard open-source
+diarization stack; WhisperX combines the two with wav2vec2 forced
+alignment. We use these as unmodified building blocks.
 
-\paragraph{Meeting understanding.}
-AMI~\cite{radford2023whisper} and ICSI have driven meeting NLP research for
-two decades. More recent benchmarks include MeetingBank
-\cite{hu2023meetingbank}, a long-form city-council summarization corpus,
-and AliMeeting (the M2MeT challenge)~\cite{yu2022m2met}, the canonical
-Mandarin multi-party corpus. MELD~\cite{poria2019meld} supplies 7-way
-emotion labels on multi-party TV dialogue.
-
-\paragraph{Neural machine translation.}
-NLLB-200~\cite{nllb2022} is the de facto open-source baseline for
-low-resource translation. Prior comparisons in conversational settings have
-noted LLMs' advantage in handling pragmatics and code-switching, which our
-numbers corroborate.
+\paragraph{Meeting corpora and baselines.}
+AMI~\cite{carletta2006ami} and AliMeeting (M2MeT)~\cite{yu2022m2met}
+are the canonical English and Mandarin multi-party meeting corpora;
+MELD~\cite{poria2019meld} supplies 7-way conversational emotion
+labels. On the generation side, BART~\cite{lewis2020bart} is the
+default encoder-decoder summarizer (1\,024-token limit, decisive on
+meeting-length inputs), and NLLB-200~\cite{nllb2022} is the de
+facto MT baseline---its distilled 600\,M checkpoint performs
+markedly worse on EN$\to$ZH than on ZH$\to$EN in our benchmark
+(Sec.~\ref{sec:exp}).
 
 \paragraph{LLM-based evaluation.}
-LLM-as-a-Judge~\cite{zheng2023judge} scored Likert ratings from GPT-4 to
-approximate human judgements on MT-Bench and Chatbot Arena, reporting 80\%
-agreement with crowdworkers. We extend the framework to three structured
-axes (faithfulness / coverage / specificity) on meeting outputs.
-Self-RAG~\cite{asai2024selfrag} and related retrieval-augmented generation
-work inform our Q\&A module.
-
-\paragraph{Pretrained summarization baselines.}
-BART~\cite{lewis2020bart} and mT5~\cite{xue2021mt5} are the dominant
-encoder-decoder pretrained summarizers; both suffer from 1024-token input
-limits that prove a decisive disadvantage on meeting-length inputs.
+Zheng~\emph{et~al.}~\cite{zheng2023judge} score Likert ratings from
+GPT-4 to approximate human judgements, reporting ${\sim}80\%$
+agreement with crowdworkers. We adopt their framework on
+faithfulness / coverage / specificity and use GPT-4o (not our
+system's GPT-4o-mini) as the judge to limit self-preference bias.
 
 \section{Methodology}
 \label{sec:method}
 
-\subsection{Shared-Transcript Parallel Architecture}
+\subsection{Shared-Transcript Modular Architecture}
+\label{sec:arch}
 
-Figure~\ref{fig:arch} shows the pipeline. A single WhisperX pass produces
-a canonical \texttt{Transcript} object --- a list of \texttt{Utterance}
-records carrying \texttt{(speaker, start, end, text, lang)} --- that all
-four downstream modules and the Q\&A index consume without re-running ASR.
-This factoring has three payoffs: (i) the ASR/diar cost of roughly
-$0.5\times$ real-time on CPU is paid once per audio file (then cached by
-SHA-256); (ii) the four downstream modules can be evaluated and ablated
-independently; (iii) introducing a new module (here, Q\&A and live mode)
-requires no changes to upstream components.
+Fig.~\ref{fig:arch} shows the pipeline. A single WhisperX pass emits
+a canonical \texttt{Transcript} JSON object---a list of
+\texttt{Utterance} records carrying \texttt{(speaker,$t_s$,$t_e$,%
+text,lang)}---that all four downstream modules and the Q\&A index
+consume without re-running ASR. This factoring has three payoffs:
+(i)~the ASR and diarization cost of roughly $0.5\times$ real-time on
+CPU is paid once per audio file (then cached by SHA-256); (ii)~the
+downstream modules can be evaluated and ablated independently; and
+(iii)~introducing a new module (here, Q\&A and live mode) requires no
+changes to upstream components. The four language-understanding
+modules are independent in the DAG sense but are currently executed
+serially; the architecture does not prevent a parallel driver.
 
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}[
-  node distance=10pt and 10pt,
-  box/.style={draw, rounded corners, fill=gray!10, minimum height=20pt, minimum width=62pt, align=center, font=\scriptsize},
-  llm/.style={draw, rounded corners, fill=blue!10, minimum height=20pt, minimum width=62pt, align=center, font=\scriptsize},
-  qa/.style={draw, rounded corners, fill=green!10, minimum height=20pt, minimum width=56pt, align=center, font=\scriptsize},
-  data/.style={draw, dashed, fill=yellow!20, minimum height=20pt, minimum width=80pt, align=center, font=\scriptsize},
-  arr/.style={-{Latex[length=1.5mm]}, thick},
+  node distance=8pt and 8pt,
+  box/.style={draw, rounded corners, fill=gray!10, minimum height=16pt, minimum width=46pt, align=center, font=\scriptsize},
+  llm/.style={draw, rounded corners, fill=blue!10, minimum height=16pt, minimum width=46pt, align=center, font=\scriptsize},
+  qa/.style={draw, rounded corners, fill=green!10, minimum height=16pt, minimum width=46pt, align=center, font=\scriptsize},
+  data/.style={draw, dashed, fill=yellow!20, minimum height=16pt, minimum width=150pt, align=center, font=\scriptsize},
+  arr/.style={-{Latex[length=1.2mm]}, thick, shorten >=1pt, shorten <=1pt},
 ]
 \node[data] (audio) {Audio (.wav)};
-\node[box, below=of audio] (asr) {WhisperX ASR + Diarization};
-\node[data, below=of asr] (tx) {Canonical Transcript (speaker, $t_s$, $t_e$, text, lang)};
+\node[box, below=of audio] (asr) {WhisperX ASR + pyannote diarization};
+\node[data, below=of asr] (tx) {Canonical Transcript (speaker,$t_s$,$t_e$,text,lang)};
 
-% Five downstream modules, evenly spaced
-\node[llm, below=24pt of tx, xshift=-180pt] (sum) {M2\\Summary};
-\node[llm, below=24pt of tx, xshift=-90pt]  (tr)  {M3\\Translate};
-\node[llm, below=24pt of tx, xshift=0pt]    (ac)  {M4\\Actions};
-\node[llm, below=24pt of tx, xshift=90pt]   (se)  {M5\\Sentiment};
-\node[qa,  below=24pt of tx, xshift=180pt]  (qa)  {Q\&A\\(bonus)};
+\node[llm, below=20pt of tx, xshift=-90pt] (sum) {M2\\Summary};
+\node[llm, below=20pt of tx, xshift=-45pt]  (tr)  {M3\\Translate};
+\node[llm, below=20pt of tx, xshift=0pt]    (ac)  {M4\\Actions};
+\node[llm, below=20pt of tx, xshift=45pt]   (se)  {M5\\Sentiment};
+\node[qa,  below=20pt of tx, xshift=90pt]   (qa)  {Q\&A\\(bonus)};
 
-\node[data, below=28pt of ac, minimum width=220pt] (ui) {Gradio UI (Batch + Live tabs)};
+\node[data, below=22pt of ac, minimum width=160pt] (ui) {Gradio UI (Batch + Live tabs)};
 
 \draw[arr] (audio) -- (asr);
 \draw[arr] (asr) -- (tx);
@@ -160,204 +164,233 @@ requires no changes to upstream components.
   \draw[arr] (\t.south) -- (ui.north);
 }
 \end{tikzpicture}
-\caption{Shared-transcript parallel architecture. A single WhisperX pass
-produces the canonical transcript JSON that every downstream module
-consumes. Yellow = data artifacts, grey = pretrained/local models, blue =
-GPT-4o-mini LLM calls, green = retrieval-based bonus module.}
+\caption{Shared-transcript modular architecture. A single WhisperX
+pass produces the canonical transcript JSON that every downstream
+module consumes. Yellow = data artifacts, grey = pretrained models,
+blue = GPT-4o-mini calls, green = retrieval-based bonus.}
 \label{fig:arch}
 \end{figure}
 
 \subsection{Bilingual-Aware Prompting}
 
 The translation module (M3) performs per-utterance ZH$\leftrightarrow$EN
-translation with a three-turn context window of prior utterances supplied
-as system-visible context, enabling pronoun and antecedent resolution
-across speaker turns. A CJK character-ratio heuristic classifies each
-utterance's source language when WhisperX returns \texttt{auto}. The
-summary module (M2) detects dominant language from the transcript and
-emits bullets in that language, so a Mandarin meeting yields a Mandarin
-summary without extra configuration.
+translation with a three-turn sliding context window of prior
+utterances, enabling pronoun and antecedent resolution across speaker
+turns. Language handling is \emph{meeting-level} by default:
+WhisperX stamps one language tag on every utterance, and our
+CJK character-ratio heuristic only fires as a fallback when that tag
+is \texttt{auto}. This is adequate for the monolingual AMI and
+AliMeeting meetings we evaluate, but a proper per-utterance LID
+(e.g., VoxLingua) would be needed for real code-switched Hong~Kong
+meetings; we leave that to future work. The summary module (M2)
+detects the dominant language from the transcript and emits bullets
+in that language, so a Mandarin meeting yields a Mandarin summary
+without extra configuration.
 
 \subsection{Structured Action-Item Extraction}
 
 M4 uses OpenAI function calling with a strict JSON schema. The
-\texttt{assignee} field is declared as an \texttt{enum} populated with the
-speaker IDs produced by M1, which makes the model impossible to invent a
+\texttt{assignee} field is declared as an \texttt{enum} populated with
+the speaker IDs produced by M1, so the model cannot invent a
 non-existent participant as owner. The schema further requires an
-\texttt{evidence\_span} --- a direct quote from the transcript --- so every
+\texttt{evidence\_span}---a direct quote from the transcript---so every
 extracted action is verifiable against its source line:
-
-\begin{small}
+{\small
 \begin{verbatim}
 { "items": [{
     "task": str, "assignee": one_of(speakers),
     "due": str|null, "priority": "H"|"M"|"L",
     "evidence_span": str }] }
-\end{verbatim}
-\end{small}
+\end{verbatim}}
 
 \subsection{Live Streaming Mode}
 
-The live tab captures microphone audio via Gradio's streaming callback
-(delta chunks, typically 500\,ms each). Our \texttt{MicStream} class
-accumulates a 1-second buffer, flushes via \texttt{faster-whisper base}
-(int8, CPU), and dispatches each resulting utterance to a thread-pool
-worker that performs the translation LLM call. The transcript therefore
-appears in the UI within roughly 1--2\,s of the end of the spoken
-utterance, while the translation catches up one or two stream events
-later. A user-facing \textbf{Process now} button force-flushes residual
-audio when the speaker pauses below the buffer threshold.
+The live tab captures microphone audio via Gradio's streaming
+callback (500\,ms delta chunks). Our \texttt{MicStream} class
+accumulates a 1-second buffer, runs \texttt{faster-whisper base}
+(int8, CPU) on the buffer, and dispatches each resulting utterance to
+a thread-pool worker for the translation LLM call. Live mode does
+\emph{not} run pyannote diarization---it is too heavy for 1-s chunks
+on CPU---so utterances are emitted under a single \texttt{SPEAKER}
+label; the batch pipeline retains full speaker attribution.
+A \textbf{Process now} button force-flushes residual audio when the
+speaker pauses below the buffer threshold.
 
-\subsection{Unified LLM-as-Judge Evaluation}
+\subsection{LLM-as-Judge Pilot}
+\label{sec:judge}
 
-ROUGE and BLEU are n-gram surface-form metrics and BART's 1024-token
-truncation is known to depress them on meeting-length inputs. We
-therefore run a secondary evaluation pass where GPT-4o (the larger sibling
-of our system's GPT-4o-mini) rates every \{transcript, output, system\}
-triple on three 1--5 Likert axes: \emph{faithfulness} (does the output
-avoid hallucination?), \emph{coverage} (is important content captured?),
-and \emph{specificity} (is the output concrete rather than vague?). We
-explicitly avoid using GPT-4o-mini as the judge to prevent self-preference
-bias~\cite{zheng2023judge}. This layer lets us diagnose the qualitative
-pattern that surface metrics hide in §\ref{sec:exp} and §\ref{sec:disc}.
+ROUGE and BLEU are n-gram surface-form metrics, and BART's
+1\,024-token truncation is known to depress them on meeting-length
+inputs. We therefore run a small LLM-as-Judge pilot (3 triples:
+GPT summary, BART summary, and GPT action-item list---all on the AMI
+ES2004a full meeting) where GPT-4o rates each \{transcript, output,
+system\} triple on three 1--5 Likert axes: \emph{faithfulness}
+(does the output avoid hallucination?), \emph{coverage}
+(is important content captured?), and \emph{specificity}
+(is the output concrete rather than vague?). We cap the transcript
+shown to the judge at 8\,000 characters to fit its context budget.
+This is a pilot, not a full human-correlation study, and its sample
+size is explicitly small; Sec.~\ref{sec:disc} explains how the signal
+still complements surface metrics.
 
 \section{Experiments}
 \label{sec:exp}
 
 \subsection{Datasets}
-
-Table~\ref{tab:datasets} lists the evaluation datasets. All are public and
-free; no component is trained on these sets.
+Table~\ref{tab:datasets} lists the evaluation data. All are public;
+no component is trained on these sets.
 
 \begin{table}[h]
 \centering
-\small
-\begin{tabular}{lllr}
+\footnotesize
+\caption{Evaluation datasets. Sizes are the portions actually
+scored in this paper.}
+\label{tab:datasets}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llll@{}}
 \toprule
-Dataset & Language & Purpose & Size used \\
+Dataset & Lang. & Use & Size used \\
 \midrule
-AMI ES2004a~\cite{radford2023whisper} & EN & M1, M2, M4 ground truth & 1 meeting, 30\,min \\
-AliMeeting R8001\_M8004~\cite{yu2022m2met} & ZH & M1 CER + bilingual demo & 1 meeting, 26\,min \\
-MeetingBank~\cite{hu2023meetingbank} & EN & long-form summary ref & (dataset available) \\
-MELD dev~\cite{poria2019meld} & EN & M5 7-way emotion accuracy & 150 utterances \\
-news\_commentary EN-ZH & EN$\leftrightarrow$ZH & M3 BLEU & 30 pairs × 2 dir. \\
+AMI ES2004a~\cite{carletta2006ami} & EN & M1--M4 & 30-min meeting \\
+AliMeeting R8001\_M8004~\cite{yu2022m2met} & ZH & M1 CER & 2-min clip \\
+MELD dev~\cite{poria2019meld} & EN & M5 & 150 utts \\
+news\_commentary & EN$\leftrightarrow$ZH & M3 BLEU & 13$\times$2 pairs \\
 \bottomrule
 \end{tabular}
-\caption{Evaluation datasets.}
-\label{tab:datasets}
 \end{table}
 
-\subsection{Module 1 --- ASR and Diarization}
-
-We report Word Error Rate for English (AMI) and Character Error Rate for
-Chinese (AliMeeting), both with a lowercase + punctuation-stripped
-normalization applied identically to hypothesis and reference.
-Table~\ref{tab:asr} reports full-meeting numbers after 14\,min of wall
-time for ES2004a (a ${\sim}2\times$ real-time run on CPU).
+\subsection{Module 1 --- ASR with Diarization}
+\label{sec:m1}
+We report Word Error Rate for English (AMI ES2004a) and Character
+Error Rate for Chinese (AliMeeting 2-min clip), both with a
+lowercase-and-punctuation-stripped normalization applied identically
+to hypothesis and reference (Table~\ref{tab:asr}). For diarization we
+use pyannote-3.1 unmodified; the underlying diarization formulation
+is described in~\cite{plaquet23powerset}. We do \emph{not} report
+Diarization Error Rate in this paper---our pipeline change is
+limited to the integration of that third-party model into WhisperX,
+and scoring DER against AMI's RTTM labels is left to future work.
+The elevated WER reflects Whisper's discourse normalization
+(Sec.~\ref{sec:disc}).
 
 \begin{table}[h]
 \centering
-\small
+\footnotesize
+\caption{ASR baseline numbers (WhisperX large-v3, int8 CPU).}
+\label{tab:asr}
 \begin{tabular}{llr}
 \toprule
 Dataset & Metric & Value \\
 \midrule
 AMI ES2004a (30\,min) & WER & 0.407 \\
-AliMeeting R8001\_M8004 (2\,min clip) & CER & 0.325 \\
+AliMeeting R8001\_M8004 (2-min clip) & CER & 0.325 \\
 \bottomrule
 \end{tabular}
-\caption{ASR baseline numbers. The elevated WER reflects Whisper's
-tendency to normalize contractions and filler tokens against the literal
-AMI annotations, which we discuss in §\ref{sec:disc}.}
-\label{tab:asr}
 \end{table}
 
 \subsection{Module 2 --- Summarization}
-
-We compare GPT-4o-mini against BART-large-cnn on two regimes: the first
-two minutes of ES2004a (short-clip ablation) and the full 30-minute
-meeting. ROUGE is computed against the AMI reference abstract.
+We compare GPT-4o-mini against BART-large-CNN on two regimes: the
+first two minutes of ES2004a (short-clip ablation) and the full
+30-minute meeting. ROUGE is computed against the AMI reference
+abstract (Fig.~\ref{fig:rouge}). GPT's 128\,K-token context handles
+the full meeting; BART's 1\,024-token limit forces truncation, so its
+full-meeting ROUGE-1 actually drops below its own short-clip ceiling
+while GPT's rises. The ROUGE-1 gap widens from $+0.066$ on the
+clip to $+0.230$ on the full meeting.
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\linewidth]{figures/fig_rouge.pdf}
-\caption{Summary ROUGE against AMI abstract on a 2-min clip vs the full
-30-min meeting. GPT-4o-mini's 128\,K-token context handles the full
-meeting, while BART's 1024-token limit forces truncation on the long
-input --- the gap widens from +0.066 to +0.230 on ROUGE-1.}
+\includegraphics[width=0.82\linewidth]{figures/fig_rouge.pdf}
+\caption{Summary ROUGE against AMI abstract, 2-min clip vs full
+30-min meeting. BART's 1\,024-token context limit is decisive.}
 \label{fig:rouge}
 \end{figure}
 
 \subsection{Module 3 --- Translation}
-
-We sample 30 EN--ZH pairs from Helsinki-NLP/news\_commentary and evaluate
-in both directions (60 rows). sacreBLEU corpus-level scores appear in
-Figure~\ref{fig:bleu}.
+We sample 13~EN--ZH pairs from
+\texttt{Helsinki-NLP/news\_commentary}~ and evaluate in both
+directions (26 hypotheses total), each direction scored with its
+sacreBLEU-appropriate tokenizer (\texttt{zh} for ZH targets,
+\texttt{13a} for EN targets) following~\cite{post2018sacrebleu}. Our
+batch pipeline translates each utterance with a three-turn context
+window; the BLEU benchmark translates isolated sentences
+(i.e., no context) and is therefore a conservative proxy for the
+system's full in-meeting quality. Fig.~\ref{fig:bleu} reports the
+per-direction scores.
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.6\linewidth]{figures/fig_bleu.pdf}
-\caption{Translation quality on 60 EN$\leftrightarrow$ZH news-commentary
-pairs. Context-aware GPT-4o-mini beats a single-pass NLLB-200
-(distilled 600M) by 5.89 sacreBLEU.}
+\includegraphics[width=0.65\linewidth]{figures/fig_bleu.pdf}
+\caption{Per-direction sacreBLEU on news-commentary sentences
+(isolated-sentence setting). GPT-4o-mini dominates NLLB-200
+(distilled 600\,M) on EN$\to$ZH; the two systems are numerically
+close on ZH$\to$EN (23.68 vs 23.42 BLEU on 13 pairs).}
 \label{fig:bleu}
 \end{figure}
 
-\subsection{Module 4 --- Action Items}
-
+\subsection{Module 4 --- Action-Item Detection}
 AMI's abstractive summary annotations include a machine-readable
-\texttt{<actions>} section; we compare our function-calling extractions
-against those gold actions using greedy cosine-similarity matching over
-sentence-transformer embeddings (threshold 0.55).
-ES2004a has one gold action; our system extracts four, all of which contain
-that one gold task plus three routine procedural items
-(Table~\ref{tab:actions}).
+\texttt{<actions>} section. We score our function-calling output
+against those gold actions using greedy cosine-similarity matching
+over sentence-transformer embeddings (threshold 0.55).
+ES2004a annotates one gold action and no gold assignees; our system
+extracts four items, the one gold task plus three procedural routine
+items (Table~\ref{tab:actions}). This evaluation therefore measures
+\emph{task detection only}. Structured fields (\texttt{due},
+\texttt{priority}, and \texttt{evidence\_span}) are produced and
+human-inspectable in the UI but are not scored against gold here,
+because AMI does not annotate them.
 
 \begin{table}[h]
 \centering
-\small
-\begin{tabular}{lrrr}
+\footnotesize
+\caption{Action-item task-detection on AMI ES2004a (1 gold task).}
+\label{tab:actions}
+\begin{tabular}{rrr}
 \toprule
-Precision & Recall & F1 & Assignee-acc \\
+Precision & Recall & F1 \\
 \midrule
-0.25 & 1.00 & 0.40 & 0.00 \\
+0.25 & 1.00 & 0.40 \\
 \bottomrule
 \end{tabular}
-\caption{Action-item extraction on AMI ES2004a. AMI does not annotate
-assignees, so assignee accuracy is trivially zero and not informative.}
-\label{tab:actions}
 \end{table}
 
-\subsection{Module 5 --- Sentiment}
-
-Per-utterance 7-way emotion classification on 150 randomly sampled MELD
-development utterances yields 0.580 accuracy / 0.519 macro-F1, a strong
-result for a zero-shot LLM against supervised baselines that typically
-achieve 0.65--0.70 accuracy with task-specific fine-tuning. Figure
-\ref{fig:st-judge}(a) shows the resulting valence timeline.
+\subsection{Module 5 --- Sentiment / Emotion}
+Per-utterance 7-way emotion classification on 150 randomly sampled
+MELD \emph{dev} utterances yields
+\textbf{0.580~accuracy / 0.519~macro-F1}. This is a zero-shot result
+with no task-specific fine-tuning and no dialogue context. Supervised
+context-aware systems on MELD typically reach 0.65--0.70 accuracy; our
+number is competitive for the zero-shot, single-utterance setting we
+evaluate, and we do not yet test on Chinese meetings---a clear next
+step. Fig.~\ref{fig:st-judge}(a) visualises the valence timeline
+produced by the module on ES2004a.
 
 \subsection{LLM-as-Judge}
-
-GPT-4o rates three rows --- GPT summary, BART summary, and GPT action-item
-list --- on faithfulness / coverage / specificity. Figure~\ref{fig:st-judge}(b)
-visualizes the summarization pair.
+GPT-4o rates the three pilot triples from Sec.~\ref{sec:judge}
+(GPT summary, BART summary, GPT actions) on faithfulness / coverage /
+specificity. Fig.~\ref{fig:st-judge}(b) visualises the summarization
+pair.
 
 \begin{figure}[!ht]
 \centering
 \begin{minipage}[b]{0.62\linewidth}
   \centering
-  \includegraphics[width=\linewidth]{figures/fig_sentiment.pdf}
-  \\\footnotesize (a) Sentiment timeline (ES2004a, 2-min clip).
+  \includegraphics[width=\linewidth]{figures/fig_sentiment.pdf}\\
+  {\footnotesize (a) Sentiment timeline (ES2004a, 2-min clip).}
 \end{minipage}\hfill
 \begin{minipage}[b]{0.36\linewidth}
   \centering
-  \includegraphics[width=\linewidth]{figures/fig_judge.pdf}
-  \\\footnotesize (b) GPT-4o judge Likert.
+  \includegraphics[width=\linewidth]{figures/fig_judge.pdf}\\
+  {\footnotesize (b) GPT-4o judge Likert (pilot, $n{=}1$ per system).}
 \end{minipage}
-\caption{(a) Per-utterance sentiment rendered in the Gradio UI; marker
-size encodes arousal, red stars are top-3 moments. (b) LLM-as-Judge ratings:
-BART is more \emph{faithful} on the truncated input it sees; GPT covers
-more and is more concrete --- a trade-off surface-form ROUGE hides.}
+\caption{(a) Per-utterance sentiment from \texttt{pipeline\_run.json};
+marker size encodes arousal, red stars mark the top-3 moments ranked
+by $\lvert\text{valence}\rvert + \text{arousal}$ (the same formula used
+in \texttt{src/sentiment.py}).
+(b) Judge pilot: BART is scored more \emph{faithful} on the truncated
+input it sees; GPT scores higher on \emph{coverage} and
+\emph{specificity}---a trade-off surface ROUGE hides.}
 \label{fig:st-judge}
 \end{figure}
 
@@ -365,73 +398,94 @@ more and is more concrete --- a trade-off surface-form ROUGE hides.}
 \label{sec:disc}
 
 \paragraph{BART context bottleneck dominates long meetings.}
-The ROUGE-1 gap between GPT-4o-mini and BART widens from +0.066 on a
-2-minute clip to +0.230 on the full 30-minute meeting
-(Figure~\ref{fig:rouge}). BART's 1024-token truncation forces it to see
-only the first few minutes of a meeting, at which point our short-clip
-numbers become its ceiling. This demonstrates that long-context LLMs are
-not merely convenient but structurally necessary for meeting-length inputs.
+The ROUGE-1 gap between GPT-4o-mini and BART widens from $+0.066$
+on a 2-minute clip to $+0.230$ on the full 30-minute meeting
+(Fig.~\ref{fig:rouge}). BART's 1\,024-token truncation forces it to
+see only the first few minutes of the meeting, so our short-clip
+numbers effectively cap its full-meeting ceiling. Long-context LLMs
+are not just convenient here---they are structurally necessary.
 
-\paragraph{Surface metrics miss the faithfulness story.}
-Both ROUGE-1 and ROUGE-L nominally favor GPT, yet the LLM-as-Judge reveals
-that BART is actually \emph{more faithful} on its truncated input; GPT's
-advantage is in covering more of the meeting and producing more concrete
-phrasing. A summary system optimized purely for ROUGE would miss this
-behavior. This validates our decision to include the judge layer as a
-methodological novelty rather than relying on any single metric.
+\paragraph{Direction asymmetry in translation.}
+The per-direction BLEU reveals a story a single corpus-BLEU would
+flatten. On our 13 EN$\to$ZH pairs, GPT-4o-mini scores 30.01 against
+NLLB's 8.08; on the 13 ZH$\to$EN pairs the two systems score 23.68
+and 23.42 respectively, a 0.26 BLEU gap that we do \emph{not}
+interpret as meaningful on so few pairs and without resampling-based
+intervals. The EN$\to$ZH asymmetry is consistent with the known
+weakness of distilled NLLB on generate-Chinese directions. BLEU does
+not aggregate linearly across target languages, so we report the two
+directions side-by-side and avoid a single summary score.
+
+\paragraph{Surface metrics miss faithfulness.}
+Both ROUGE-1 and ROUGE-L nominally favour GPT, yet the judge pilot
+(Fig.~\ref{fig:st-judge}(b)) finds BART \emph{more faithful} on the
+truncated input it sees; GPT's advantage is in covering more of the
+meeting and producing more concrete phrasing. A summary system
+optimized purely for ROUGE would not surface this behaviour. The
+pilot is small (three triples) and we therefore frame it as a
+qualitative diagnostic rather than a claim of statistical superiority.
 
 \paragraph{WER as a misleading quality proxy.}
-Our 0.407 WER on AMI is markedly worse than Whisper's reported ${\sim}0.15$
-on clean read speech. On inspection, much of the ``error'' is Whisper's
-discourse normalization: ``she gonna answer me'' in the AMI literal
-transcript becomes ``Is she going to answer me?'' in Whisper output. For
-downstream understanding (M2--M5) this is arguably an improvement; WER
-penalizes it as substitutions. Text-normalization-aware WER would be more
-informative.
+Our 0.407 WER on AMI is markedly worse than Whisper's reported
+${\sim}0.15$ on clean read speech, but much of the gap is discourse
+normalization (``she gonna answer me'' in the AMI literal transcript
+becomes ``Is she going to answer me?'' in Whisper output). For
+downstream understanding (M2--M5) this is arguably an improvement;
+normalization-aware WER would be more informative.
 
 \paragraph{Live-mode latency budget.}
-Our live mode's end-to-end latency from mouth-closed to on-screen
-translation is roughly 2--4\,s on an Apple-Silicon MacBook, dominated by
-the 1-second audio buffer and a 1--2\,s \texttt{faster-whisper base} CPU
-pass. Translation is asynchronous and catches up within one further stream
-event. This is sufficient for ``near-real-time'' participant support (e.g.\
-following a meeting in a second language) but not yet for truly live
-simultaneous interpretation, which would require on-GPU streaming ASR or
-an OpenAI Whisper API backend.
+Manual stopwatch observation on a single Apple-Silicon MacBook places
+end-to-end latency from mouth-closed to on-screen translation at
+roughly 2--4\,s, dominated by the 1-second audio buffer and a 1--2\,s
+\texttt{faster-whisper base} CPU pass (translation is asynchronous).
+This is an eyeballed estimate, not an instrumented measurement; it is
+sufficient for ``near-real-time'' participant support but not truly
+simultaneous interpretation, which would need GPU-streaming ASR or a
+server-side Whisper API. Adding a latency logger is on our short-term
+to-do list.
 
-\paragraph{Small-N caveat.}
-Many of our numbers (WER, ROUGE, actions F1, LLM-judge) currently come
-from a single AMI meeting because pipeline validation took precedence over
-scale. We describe the infrastructure that scales the evaluation to
-dozens of meetings (\texttt{eval/data\_prep/ami.py}) and leave the
-larger-N study to future work.
+\paragraph{Scope and small-$N$ caveats.}
+Most numbers come from a single AMI meeting, and the judge pilot
+scores only three triples. The data-prep scripts in
+\texttt{eval/data\_prep/*.py} already scale to dozens of meetings,
+and Chinese-meeting evaluation beyond a 2-minute CER spot check is
+left to future work. We do not score DER: pyannote-3.1 is used
+unmodified~\cite{plaquet23powerset} and scoring it against AMI's
+RTTM labels is left to future work.
 
 \section{Conclusion}
 \label{sec:conclusion}
-We built and evaluated a bilingual smart meeting assistant organized
-around a shared-transcript parallel architecture, with four GPT-4o-mini
-modules, a retrieval-augmented Q\&A interface, and a live streaming mode.
-GPT-4o-mini matches or exceeds specialized pretrained baselines
-(BART, mT5, NLLB-200) on meeting summarization and translation, and
-our LLM-as-Judge layer surfaces a faithfulness / coverage trade-off that
-surface metrics hide. Future work should (i) scale evaluation to the full
-AMI and AliMeeting partitions, (ii) swap the live ASR backend to an
-OpenAI Whisper API or mlx-whisper for GPU-accelerated streaming, and
-(iii) extend the judge rubric to incorporate bilingual code-switching
-adequacy.
+We built a bilingual smart meeting assistant organised around a
+shared-transcript modular architecture, with four GPT-4o-mini modules,
+retrieval-augmented Q\&A, and a live streaming mode. GPT-4o-mini
+matches or exceeds BART and NLLB-200 on meeting summarization and
+EN$\to$ZH translation, and the LLM-as-Judge pilot surfaces a
+faithfulness / coverage trade-off that surface metrics hide.
+Future work: (i)~scale to the full AMI/AliMeeting partitions and
+score DER; (ii)~swap the live ASR backend to GPU-streaming or a
+server Whisper API; (iii)~replace the CJK-ratio heuristic with a
+proper per-utterance LID for code-switched meetings; and
+(iv)~expand the judge study to include human correlation.
 
-\bibliographystyle{plain}
+\bibliographystyle{IEEEtran}
 \bibliography{refs}
 
 \appendix
 \section{Prompts used}
 \label{app:prompts}
-Full system prompts for every module are shipped in the source:
-\texttt{src/summarize.py}, \texttt{src/translate.py}, \texttt{src/actions.py},
-\texttt{src/sentiment.py}, \texttt{src/qa.py}, and \texttt{eval/llm\_judge.py}.
+Full system prompts for every module are shipped in the source tree:
+\begin{itemize}
+\item Summarization: \texttt{src/summarize.py}
+\item Translation: \texttt{src/translate.py}
+\item Action items: \texttt{src/actions.py}
+\item Sentiment: \texttt{src/sentiment.py}
+\item Q\&A: \texttt{src/qa.py}
+\item LLM judge: \texttt{eval/llm\_judge.py}
+\end{itemize}
 
 \section{Presentation slides}
 \label{app:slides}
-\emph{Slides will be appended here in the final submission PDF.}
+\emph{The 15-minute presentation slides will be appended here in the
+final submission PDF, as required by the project brief.}
 
 \end{document}
