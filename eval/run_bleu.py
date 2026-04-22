@@ -1,6 +1,11 @@
 """sacreBLEU evaluation for Module 3 translation.
 
 Expects manifest: [{"source": str, "reference": str, "source_lang": "en"|"zh", "target_lang": "en"|"zh"}, ...]
+
+Scores each translation direction separately with the direction-appropriate
+sacreBLEU tokenizer (13a for English targets, zh for Chinese targets). BLEU
+is not linearly aggregable across directions, so we do *not* emit a combined
+corpus-BLEU row. Per-row hypotheses are written out for auditing.
 """
 from __future__ import annotations
 
@@ -14,6 +19,10 @@ import sacrebleu
 from src.llm_client import LLMClient
 from src.schemas import Utterance
 from src.translate import translate_utterance_llm
+
+
+# sacreBLEU tokenizer per target language.
+TOKENIZER = {"en": "13a", "zh": "zh"}
 
 
 def _llm_translate(source: str, src_lang, tgt_lang, client: LLMClient) -> str:
@@ -39,8 +48,8 @@ def evaluate(manifest_path: Path, out_path: Path, system: str = "llm") -> pd.Dat
         print(f"[nllb] device: {nllb_device}")
 
     NLLB_CODES = {"en": "eng_Latn", "zh": "zho_Hans"}
-    hyps: list[str] = []
-    refs: list[str] = []
+
+    rows: list[dict] = []
     for item in manifest:
         src = item["source"]
         ref = item["reference"]
@@ -56,14 +65,42 @@ def evaluate(manifest_path: Path, out_path: Path, system: str = "llm") -> pd.Dat
                 max_length=512,
             )
             hyp = nllb_tok.batch_decode(out, skip_special_tokens=True)[0]
-        hyps.append(hyp)
-        refs.append(ref)
+        rows.append(
+            {
+                "source_lang": item["source_lang"],
+                "target_lang": item["target_lang"],
+                "direction": f'{item["source_lang"]}2{item["target_lang"]}',
+                "source": src,
+                "reference": ref,
+                "hyp": hyp,
+            }
+        )
 
-    bleu = sacrebleu.corpus_bleu(hyps, [refs])
+    per_row = pd.DataFrame(rows)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame([{"system": system, "bleu": bleu.score, "n": len(hyps)}]).to_csv(out_path, index=False)
-    print(f"{system} BLEU: {bleu.score:.2f}")
-    return pd.DataFrame({"source": [m["source"] for m in manifest], "hyp": hyps, "ref": refs})
+    per_row_path = out_path.with_suffix(".per_row.csv")
+    per_row.to_csv(per_row_path, index=False)
+
+    summary: list[dict] = []
+    for direction, sub in per_row.groupby("direction"):
+        tgt = sub["target_lang"].iloc[0]
+        score = sacrebleu.corpus_bleu(
+            sub["hyp"].tolist(), [sub["reference"].tolist()], tokenize=TOKENIZER[tgt]
+        )
+        summary.append(
+            {
+                "system": system,
+                "direction": direction,
+                "tokenizer": TOKENIZER[tgt],
+                "bleu": score.score,
+                "n": len(sub),
+            }
+        )
+
+    pd.DataFrame(summary).to_csv(out_path, index=False)
+    for r in summary:
+        print(f"{r['system']} {r['direction']:<10} ({r['tokenizer']}): BLEU {r['bleu']:.2f} (n={r['n']})")
+    return per_row
 
 
 if __name__ == "__main__":

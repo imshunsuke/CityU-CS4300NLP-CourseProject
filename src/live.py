@@ -63,7 +63,6 @@ class MicStream:
         self.elapsed_s: float = 0.0
         self.transcript: list[dict] = []
         self.translation: list[dict] = []
-        self._counter = 0
         self._pending: list[tuple[int, Future]] = []  # (idx_into_translation, future)
 
     def reset(self):
@@ -71,7 +70,6 @@ class MicStream:
         self.elapsed_s = 0.0
         self.transcript = []
         self.translation = []
-        self._counter = 0
         self._pending = []
 
     def _drain_pending(self) -> None:
@@ -113,8 +111,12 @@ class MicStream:
             text = seg.text.strip()
             if not text:
                 continue
+            # Live mode does not run diarization (pyannote is too heavy for
+            # 1-s chunks on CPU), so we assign a single unknown-speaker label
+            # rather than fabricating SPK_0 / SPK_1 alternations. The batch
+            # pipeline uses WhisperX + pyannote for real speaker attribution.
             u = Utterance(
-                speaker=f"SPK_{self._counter % 2}",
+                speaker="SPEAKER",
                 start=t0 + seg.start,
                 end=t0 + seg.end,
                 text=text,
@@ -145,7 +147,6 @@ class MicStream:
                     translate_utterance_llm, u, [], self.target_lang, self.client
                 )
                 self._pending.append((idx, fut))
-            self._counter += 1
 
         self.elapsed_s += len(self.buffer) / self.buffer_sr
         self.buffer = np.zeros(0, dtype=np.float32)
