@@ -278,46 +278,30 @@ We compare GPT-4o-mini against BART-large-cnn on two regimes: the first
 two minutes of ES2004a (short-clip ablation) and the full 30-minute
 meeting. ROUGE is computed against the AMI reference abstract.
 
-\begin{table}[h]
+\begin{figure}[h]
 \centering
-\small
-\begin{tabular}{lllrrr}
-\toprule
-Input & System & ROUGE-1 & ROUGE-2 & ROUGE-L \\
-\midrule
-2\,min clip  & GPT-4o-mini & 0.320 & \textbf{0.078} & \textbf{0.194} \\
-2\,min clip  & BART        & 0.254 & 0.082 & 0.185 \\
-\midrule
-Full 30\,min & GPT-4o-mini & \textbf{0.393} & \textbf{0.081} & \textbf{0.180} \\
-Full 30\,min & BART        & 0.163 & 0.024 & 0.116 \\
-\bottomrule
-\end{tabular}
-\caption{Summary ROUGE against AMI abstract. GPT-4o-mini's 128\,K-token
-context handles the full meeting, while BART's 1024-token limit forces
-truncation on the long input.}
-\label{tab:rouge}
-\end{table}
+\includegraphics[width=\linewidth]{figures/fig_rouge.pdf}
+\caption{Summary ROUGE against AMI abstract on a 2-min clip vs the full
+30-min meeting. GPT-4o-mini's 128\,K-token context handles the full
+meeting, while BART's 1024-token limit forces truncation on the long
+input --- the gap widens from +0.066 to +0.230 on ROUGE-1.}
+\label{fig:rouge}
+\end{figure}
 
 \subsection{Module 3 --- Translation}
 
 We sample 30 EN--ZH pairs from Helsinki-NLP/news\_commentary and evaluate
 in both directions (60 rows). sacreBLEU corpus-level scores appear in
-Table~\ref{tab:bleu}.
+Figure~\ref{fig:bleu}.
 
-\begin{table}[h]
+\begin{figure}[h]
 \centering
-\small
-\begin{tabular}{lr}
-\toprule
-System & sacreBLEU \\
-\midrule
-GPT-4o-mini (context-aware) & \textbf{22.18} \\
-NLLB-200-distilled-600M (MPS) & 16.29 \\
-\bottomrule
-\end{tabular}
-\caption{Translation BLEU on 60 EN$\leftrightarrow$ZH pairs.}
-\label{tab:bleu}
-\end{table}
+\includegraphics[width=0.6\linewidth]{figures/fig_bleu.pdf}
+\caption{Translation quality on 60 EN$\leftrightarrow$ZH news-commentary
+pairs. Context-aware GPT-4o-mini beats a single-pass NLLB-200
+(distilled 600M) by 5.89 sacreBLEU.}
+\label{fig:bleu}
+\end{figure}
 
 \subsection{Module 4 --- Action Items}
 
@@ -349,31 +333,33 @@ assignees, so assignee accuracy is trivially zero and not informative.}
 Per-utterance 7-way emotion classification on 150 randomly sampled MELD
 development utterances yields 0.580 accuracy / 0.519 macro-F1, a strong
 result for a zero-shot LLM against supervised baselines that typically
-achieve 0.65--0.70 accuracy with task-specific fine-tuning.
+achieve 0.65--0.70 accuracy with task-specific fine-tuning. Figure
+\ref{fig:st-judge}(a) shows the resulting valence timeline.
 
 \subsection{LLM-as-Judge}
 
 GPT-4o rates three rows --- GPT summary, BART summary, and GPT action-item
-list --- on faithfulness / coverage / specificity; results are in
-Table~\ref{tab:judge}.
+list --- on faithfulness / coverage / specificity. Figure~\ref{fig:st-judge}(b)
+visualizes the summarization pair.
 
-\begin{table}[h]
+\begin{figure}[!ht]
 \centering
-\small
-\begin{tabular}{lllccc}
-\toprule
-Kind & System & & Faith. & Coverage & Specif. \\
-\midrule
-Summary & GPT-4o-mini & & 2.0 & \textbf{3.0} & \textbf{3.0} \\
-Summary & BART        & & \textbf{3.0} & 2.0 & 2.0 \\
-Actions & GPT-4o-mini & & 2.0 & 2.0 & 3.0 \\
-\bottomrule
-\end{tabular}
-\caption{LLM-as-Judge Likert 1--5 ratings from GPT-4o. The summary pair
-reveals a classical trade-off: BART is more faithful (conservative) but
-GPT covers more and is more concrete.}
-\label{tab:judge}
-\end{table}
+\begin{minipage}[b]{0.62\linewidth}
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig_sentiment.pdf}
+  \\\footnotesize (a) Sentiment timeline (ES2004a, 2-min clip).
+\end{minipage}\hfill
+\begin{minipage}[b]{0.36\linewidth}
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig_judge.pdf}
+  \\\footnotesize (b) GPT-4o judge Likert.
+\end{minipage}
+\caption{(a) Per-utterance sentiment rendered in the Gradio UI; marker
+size encodes arousal, red stars are top-3 moments. (b) LLM-as-Judge ratings:
+BART is more \emph{faithful} on the truncated input it sees; GPT covers
+more and is more concrete --- a trade-off surface-form ROUGE hides.}
+\label{fig:st-judge}
+\end{figure}
 
 \section{Discussion}
 \label{sec:disc}
@@ -381,7 +367,7 @@ GPT covers more and is more concrete.}
 \paragraph{BART context bottleneck dominates long meetings.}
 The ROUGE-1 gap between GPT-4o-mini and BART widens from +0.066 on a
 2-minute clip to +0.230 on the full 30-minute meeting
-(Table~\ref{tab:rouge}). BART's 1024-token truncation forces it to see
+(Figure~\ref{fig:rouge}). BART's 1024-token truncation forces it to see
 only the first few minutes of a meeting, at which point our short-clip
 numbers become its ceiling. This demonstrates that long-context LLMs are
 not merely convenient but structurally necessary for meeting-length inputs.
