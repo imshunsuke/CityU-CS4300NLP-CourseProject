@@ -18,7 +18,7 @@ from .schemas import Language, Utterance
 from .translate import translate_utterance_llm
 
 
-CHUNK_SECONDS = 1.0        # minimum audio (s) per Whisper call
+CHUNK_SECONDS = 5.0        # minimum audio (s) per Whisper call
 TARGET_SR = 16000          # Whisper's expected sample rate
 WHISPER_MODEL = "base"     # Live uses a smaller, faster model (145 MB, ~2x faster than small)
 DEVICE = "cpu"
