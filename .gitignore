@@ -27,6 +27,10 @@ data/ami/
 data/ami-annotations/
 data/meld/
 
+# Personal demo prep — local only
+demo_files/CHEAT_SHEET.md
+demo_files/CHEAT_SHEET.pdf
+
 # Cache
 .cache/
 .diskcache/
