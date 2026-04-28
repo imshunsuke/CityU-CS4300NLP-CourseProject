@@ -14,12 +14,18 @@ __pycache__/
 # macOS
 .DS_Store
 
-# Data
+# Data — audio extensions (kept for demo_files/ and other one-offs)
 data/**/*.wav
 data/**/*.mp3
 data/**/*.flac
 data/**/*.m4a
 !data/samples/.gitkeep
+
+# Dataset folders — download via eval/data_prep/, never commit
+data/alimeeting/
+data/ami/
+data/ami-annotations/
+data/meld/
 
 # Cache
 .cache/
